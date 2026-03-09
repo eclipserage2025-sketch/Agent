@@ -9,7 +9,7 @@ class TestGUI(unittest.TestCase):
     def test_index(self):
         response = self.app.get('/')
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b'AI Litecoin Miner Dashboard', response.data)
+        self.assertIn(b'AI Litecoin Miner Pro', response.data)
 
     def test_stats_initial(self):
         response = self.app.get('/stats')

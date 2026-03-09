@@ -1,6 +1,8 @@
 numpy
 scikit-learn
 flask
+waitress
 cryptography
 noiseprotocol
 psutil
+pyinstaller

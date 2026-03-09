@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Litecoin Miner GUI V3</title>
+    <title>AI Litecoin Miner Pro</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>AI Litecoin Miner Dashboard <span id="protocol-v" class="protocol-badge">V1</span></h1>
+            <h1>AI Litecoin Miner Pro <span id="protocol-v" class="protocol-badge">V1</span></h1>
             <div id="status-badge" class="badge">Checking...</div>
         </header>
 
@@ -37,27 +37,31 @@
             <form id="config-form">
                 <div class="form-group">
                     <label>Pool Host:</label>
-                    <input type="text" name="host" id="host" value="litecoinpool.org">
+                    <input type="text" name="host" id="host" value="{{ config.host }}">
                 </div>
                 <div class="form-group">
                     <label>Pool Port:</label>
-                    <input type="number" name="port" id="port" value="3333">
+                    <input type="number" name="port" id="port" value="{{ config.port }}">
                 </div>
                 <div class="form-group">
                     <label>Worker Username:</label>
-                    <input type="text" name="user" id="user" placeholder="username.worker">
+                    <input type="text" name="user" id="user" value="{{ config.user }}" placeholder="username.worker">
                 </div>
                 <div class="form-group">
                     <label>Initial Threads:</label>
-                    <input type="number" name="threads" id="threads-in" value="4">
+                    <input type="number" name="threads" id="threads-in" value="{{ config.threads }}">
                 </div>
                 <div class="form-group checkbox-group">
-                    <input type="checkbox" name="v2" id="v2">
+                    <input type="checkbox" name="v2" id="v2" {{ 'checked' if config.v2 }}>
                     <label for="v2">Enable Stratum V2</label>
                 </div>
                 <div class="form-group checkbox-group">
-                    <input type="checkbox" name="autotune" id="autotune" checked>
+                    <input type="checkbox" name="autotune" id="autotune" {{ 'checked' if config.autotune }}>
                     <label for="autotune">Auto-Tuning</label>
+                </div>
+                <div class="form-group checkbox-group">
+                    <input type="checkbox" name="autostart" id="autostart" {{ 'checked' if config.autostart }}>
+                    <label for="autostart">Auto-Start on GUI Launch</label>
                 </div>
                 <div class="btn-group">
                     <button type="button" id="start-btn" class="btn btn-primary">Start Mining</button>
@@ -96,6 +100,16 @@
                 });
         }
 
+        function updateLogs() {
+            fetch('/logs')
+                .then(response => response.json())
+                .then(data => {
+                    const logWindow = document.getElementById('logs');
+                    logWindow.innerHTML = data.map(log => `<p>${log}</p>`).join('');
+                    logWindow.scrollTop = logWindow.scrollHeight;
+                });
+        }
+
         document.getElementById('start-btn').onclick = () => {
             const formData = new FormData(document.getElementById('config-form'));
             fetch('/start', { method: 'POST', body: formData });
@@ -106,7 +120,9 @@
         };
 
         setInterval(updateStats, 2000);
+        setInterval(updateLogs, 3000);
         updateStats();
+        updateLogs();
     </script>
 </body>
 </html>

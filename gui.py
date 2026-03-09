@@ -1,7 +1,10 @@
 from flask import Flask, render_template, request, jsonify
+from waitress import serve
 import threading
 import time
 from miner import MinerController
+from config_manager import load_config, save_config
+from miner_logger import logger, get_recent_logs
 
 app = Flask(__name__)
 miner_instance = None
@@ -9,7 +12,8 @@ miner_thread = None
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    config = load_config()
+    return render_template('index.html', config=config)
 
 @app.route('/stats')
 def get_stats():
@@ -34,6 +38,10 @@ def get_stats():
         'v2': False
     })
 
+@app.route('/logs')
+def get_logs():
+    return jsonify(get_recent_logs())
+
 @app.route('/start', methods=['POST'])
 def start_miner():
     global miner_instance, miner_thread
@@ -50,6 +58,16 @@ def start_miner():
     if not user:
         return jsonify({'status': 'Error: Missing worker username'}), 400
 
+    # Persist config
+    save_config({
+        "host": host, "port": port, "user": user,
+        "threads": threads, "v2": v2, "autotune": autotune
+    })
+
+    return do_start(host, port, user, threads, v2, autotune)
+
+def do_start(host, port, user, threads, v2, autotune):
+    global miner_instance, miner_thread
     miner_instance = MinerController(host, port, user, v2=v2)
     miner_instance.mp_miner.num_processes = threads
 
@@ -57,11 +75,10 @@ def start_miner():
         try:
             miner_instance.start(autotune=autotune)
         except Exception as e:
-            print(f"Miner thread error: {e}")
+            logger.error(f"Miner thread error: {e}")
 
     miner_thread = threading.Thread(target=run_miner, daemon=True)
     miner_thread.start()
-
     return jsonify({'status': 'Mining started'})
 
 @app.route('/stop', methods=['POST'])
@@ -73,7 +90,16 @@ def stop_miner():
     return jsonify({'status': 'Not mining'})
 
 def run_gui(host='127.0.0.1', port=5000):
-    app.run(host=host, port=port, debug=False, use_reloader=False)
+    logger.info(f"Starting Production Web Server at http://{host}:{port}")
+
+    # Auto-start if config allows
+    config = load_config()
+    if config.get("autostart") and config.get("user"):
+        logger.info("Auto-start enabled. Launching miner...")
+        do_start(config['host'], config['port'], config['user'],
+                 config['threads'], config['v2'], config['autotune'])
+
+    serve(app, host=host, port=port, _quiet=True)
 
 if __name__ == '__main__':
     run_gui()
