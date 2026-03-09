@@ -84,6 +84,16 @@ class MinerController:
                 'ntime': params[7],
                 'clean_jobs': params[8]
             }
+        else:
+            # SV2 NewMiningJob payload
+            # <I job_id, <I prev_hash_ptr, <I version, <I nbits, <I ntime, <I merkle_root... (simplified)
+            # In a real SV2 client, this is binary.
+            if len(params) >= 20:
+                job_id = struct.unpack("<I", params[0:4])[0]
+                self.current_job = {
+                    'job_id': job_id,
+                    'raw_payload': params
+                }
 
         if self.is_mining:
             self.mp_miner.stop_mining()
@@ -112,7 +122,13 @@ class MinerController:
             header_base_bytes = binascii.unhexlify(header_base)
             job_id = self.current_job['job_id']
         else:
-            return
+            # For SV2, the job already contains the necessary components.
+            # Simplified: Use the first 76 bytes of a dummy header constructed from payload
+            payload = self.current_job['raw_payload']
+            # SV2 jobs are usually 32-byte chunks.
+            # Dummy header base for demonstration of integration
+            header_base_bytes = payload[:76]
+            job_id = self.current_job['job_id']
 
         start_nonce, end_nonce = self.ai.predict_nonce_range(job_id, range_size=100000)
 
@@ -134,6 +150,11 @@ class MinerController:
         if not self.v2:
             extranonce2 = "00000001"
             self.client.submit(self.client.username, job_id, extranonce2, self.current_job['ntime'], hex(nonce)[2:].zfill(8))
+        else:
+            # For SV2, use the submit method.
+            # Simplified: Use 1 as channel_id for single-channel mining
+            ntime = int(time.time()) # In real SV2 ntime is often handled by pool
+            self.client.submit(1, job_id, ntime, nonce)
 
     def stats_dashboard(self):
         while self.is_mining:

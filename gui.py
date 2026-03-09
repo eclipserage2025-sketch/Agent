@@ -5,10 +5,14 @@ import time
 from miner import MinerController
 from config_manager import load_config, save_config
 from miner_logger import logger, get_recent_logs
+from train_ai import run_synthetic_training
 
 app = Flask(__name__)
 miner_instance = None
 miner_thread = None
+# Shared AI instance that exists even when not mining
+from ai_model import AIMiner
+global_ai = AIMiner()
 
 @app.route('/')
 def index():
@@ -17,14 +21,16 @@ def index():
 
 @app.route('/stats')
 def get_stats():
-    global miner_instance
+    global miner_instance, global_ai
+    active_ai = miner_instance.ai if miner_instance else global_ai
+
     if miner_instance:
         return jsonify({
             'is_mining': miner_instance.is_mining,
             'hash_rate': miner_instance.hash_rate,
             'total_hashes': miner_instance.mp_miner.progress_counter.value,
             'shares_found': miner_instance.shares_found,
-            'ai_trained': miner_instance.ai.is_trained,
+            'ai_trained': active_ai.is_trained,
             'threads': miner_instance.mp_miner.num_processes,
             'v2': miner_instance.v2,
             'gpu_active': miner_instance.gpu_miner.is_available,
@@ -32,7 +38,7 @@ def get_stats():
         })
     return jsonify({
         'is_mining': False, 'hash_rate': 0.00, 'total_hashes': 0,
-        'shares_found': 0, 'ai_trained': False, 'threads': 0,
+        'shares_found': 0, 'ai_trained': active_ai.is_trained, 'threads': 0,
         'v2': False, 'gpu_active': False, 'best_coin': 'LTC'
     })
 
@@ -40,9 +46,20 @@ def get_stats():
 def get_logs():
     return jsonify(get_recent_logs())
 
+@app.route('/train', methods=['POST'])
+def train_ai():
+    global miner_instance, global_ai
+    active_ai = miner_instance.ai if miner_instance else global_ai
+
+    def background_train():
+        run_synthetic_training(active_ai, count=2000)
+
+    threading.Thread(target=background_train, daemon=True).start()
+    return jsonify({'status': 'Training started in background'})
+
 @app.route('/start', methods=['POST'])
 def start_miner():
-    global miner_instance, miner_thread
+    global miner_instance, miner_thread, global_ai
     if miner_instance and miner_instance.is_mining:
         return jsonify({'status': 'Already mining'})
 
@@ -66,8 +83,12 @@ def start_miner():
     return do_start(host, port, user, threads, v2, autotune, profit_switch)
 
 def do_start(host, port, user, threads, v2, autotune, profit_switch):
-    global miner_instance, miner_thread
+    global miner_instance, miner_thread, global_ai
     miner_instance = MinerController(host, port, user, v2=v2)
+    # Inherit global AI progress
+    if global_ai.is_trained:
+        miner_instance.ai = global_ai
+
     miner_instance.mp_miner.num_processes = threads
 
     def run_miner():

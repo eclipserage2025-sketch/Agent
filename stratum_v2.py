@@ -46,6 +46,12 @@ class StratumV2Client:
         msg = SV2Message(MSG_OPEN_STANDARD_MINING_CHANNEL, payload)
         self.send_message(msg)
 
+    def submit(self, channel_id, job_id, ntime, nonce):
+        payload = struct.pack("<IIII", channel_id, 0, job_id, nonce)
+        payload += struct.pack("<I", ntime)
+        msg = SV2Message(MSG_SUBMIT_SHARES_STANDARD, payload)
+        self.send_message(msg)
+
     def send_message(self, msg):
         raw = msg.serialize()
         if self.noise:

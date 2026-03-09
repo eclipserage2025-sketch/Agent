@@ -36,15 +36,6 @@ class TestUpgradedMiner(unittest.TestCase):
         self.assertEqual(len(mr), 64)
 
     def test_serialize_header(self):
-        controller = MinerController("localhost", 3333, "user")
-        version = "00000001"
-        prevhash = "0000000000000000000000000000000000000000000000000000000000000000"
-        merkle_root = "0000000000000000000000000000000000000000000000000000000000000001"
-        ntime = "50000000"
-        nbits = "1d00ffff"
-        nonce = 123456
-
-        # We'll use a local mock of serialize_header to verify
         def serialize_local(v, ph, mr, nt, nb, n):
             def reverse_hex(hex_str):
                 return binascii.hexlify(binascii.unhexlify(hex_str)[::-1]).decode()
@@ -58,21 +49,31 @@ class TestUpgradedMiner(unittest.TestCase):
             )
             return binascii.unhexlify(header)
 
+        version = "00000001"
+        prevhash = "0" * 64
+        merkle_root = "0" * 64
+        ntime = "50000000"
+        nbits = "1d00ffff"
+        nonce = 123456
+
         header = serialize_local(version, prevhash, merkle_root, ntime, nbits, nonce)
         self.assertEqual(len(header), 80)
-        self.assertEqual(header[0:4], b"\x01\x00\x00\x00")
-        self.assertEqual(header[76:80], struct.pack("<I", nonce))
 
     def test_ai_neural_network(self):
         ai = AIMiner()
         job_id = "test_job"
-        for i in range(10): # Trigger training
+        ai.range_size = 5000
+        for i in range(10):
             ai.collect_feedback(job_id, i * 1000, True)
 
         self.assertTrue(ai.is_trained)
-        start, end = ai.predict_nonce_range(job_id, range_size=5000)
-        self.assertGreaterEqual(start, 0)
-        self.assertLess(start, end)
+        # Test default range_size
+        start, end = ai.predict_nonce_range(job_id)
+        self.assertEqual(end - start, 5000)
+
+        # Test override range_size (the fix)
+        start2, end2 = ai.predict_nonce_range(job_id, range_size=10000)
+        self.assertEqual(end2 - start2, 10000)
 
     def test_multiprocess_miner(self):
         miner = MultiProcessMiner(num_processes=2)

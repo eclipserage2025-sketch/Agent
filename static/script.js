@@ -140,6 +140,11 @@ document.getElementById('clear-logs').onclick = () => {
     document.getElementById('logs').innerHTML = '<p>Logs cleared (display only).</p>';
 };
 
+document.getElementById('train-ai-btn').onclick = () => {
+    fetch('/train', { method: 'POST' });
+    notify("Training Started", "Generating synthetic data and training Neural Network...");
+};
+
 setInterval(updateStats, 2000);
 setInterval(updateLogs, 3000);
 updateStats();
