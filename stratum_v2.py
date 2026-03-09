@@ -40,8 +40,6 @@ class StratumV2Client:
         self.send_message(msg)
 
     def open_channel(self, user):
-        # OpenStandardMiningChannel:
-        #   user_identity (len + str), nominal_hash_rate (8), max_target (32)
         user_bytes = user.encode()
         payload = struct.pack("<B", len(user_bytes)) + user_bytes
         payload += struct.pack("<d", 0.0) # nominal_hash_rate
@@ -53,8 +51,6 @@ class StratumV2Client:
     def send_message(self, msg):
         raw = msg.serialize()
         if self.noise:
-            # SV2 Encrypted framing:
-            #   length (3 bytes, includes MAC) + encrypted_msg
             encrypted = self.noise.encrypt(raw)
             header = len(encrypted).to_bytes(3, 'little')
             self.sock.sendall(header + encrypted)
@@ -72,7 +68,6 @@ class StratumV2Client:
                 continue
 
             try:
-                # SV2 Header (5 bytes)
                 header = self.sock.recv(5)
                 if not header:
                     self.is_connected = False
@@ -85,7 +80,6 @@ class StratumV2Client:
                 if msg_type == MSG_NEW_MINING_JOB:
                     if self.on_new_job:
                         self.on_new_job(payload)
-                # Handle other message types...
             except Exception as e:
                 print(f"SV2 Listen error: {e}")
                 self.is_connected = False
@@ -96,5 +90,8 @@ class StratumV2Client:
         thread = threading.Thread(target=self.listen, daemon=True)
         thread.start()
 
-if __name__ == "__main__":
-    print("StratumV2Client logic defined.")
+    def stop(self):
+        self.running = False
+        if self.sock:
+            self.sock.close()
+            self.is_connected = False
