@@ -7,6 +7,7 @@ from stratum import StratumClient
 from stratum_v2 import StratumV2Client
 from ai_model import AIMiner
 from worker import MultiProcessMiner
+from gpu_worker import GPUWorker
 from autotuner import AutoTuner
 
 def reverse_hex(hex_str):
@@ -44,8 +45,10 @@ class MinerController:
 
         self.ai = AIMiner()
         self.mp_miner = MultiProcessMiner()
+        self.gpu_miner = GPUWorker()
         self.autotuner = AutoTuner(self)
         self.is_mining = False
+        self.gpu_is_mining = False
         self.current_job = None
         self.target = 0x00000ffff0000000000000000000000000000000000000000000000000000000
         self.diff = 1
@@ -139,6 +142,39 @@ class MinerController:
             print("="*50)
             time.sleep(5)
 
+    def gpu_mining_loop(self):
+        while self.is_mining:
+            if self.gpu_miner.enabled and self.current_job:
+                self.gpu_is_mining = True
+                # Prepare header for GPU
+                if not self.v2:
+                    extranonce1 = getattr(self.client, 'extranonce1', "00000001")
+                    extranonce2 = "00000001"
+                    merkle_root = build_merkle_root(
+                        self.current_job['coinb1'], self.current_job['coinb2'],
+                        extranonce1, extranonce2, self.current_job['merkle_branch']
+                    )
+                    header_base = (
+                        reverse_hex(self.current_job['version']) +
+                        reverse_hex(self.current_job['prevhash']) +
+                        reverse_hex(merkle_root) +
+                        reverse_hex(self.current_job['ntime']) +
+                        reverse_hex(self.current_job['nbits'])
+                    )
+                    header_base_bytes = binascii.unhexlify(header_base)
+
+                    range_size = 5000 # Increased for efficiency
+                    start_nonce, _ = self.ai.predict_nonce_range(self.current_job['job_id'], range_size=range_size)
+                    gpu_nonce = self.gpu_miner.mine(header_base_bytes, start_nonce, range_size, self.target)
+
+                    if gpu_nonce is not None:
+                        print(f"\n[!] GPU SHARE FOUND: {hex(gpu_nonce)}")
+                        self.shares_found += 1
+                        self.client.submit(self.client.username, self.current_job['job_id'], extranonce2, self.current_job['ntime'], hex(gpu_nonce)[2:].zfill(8))
+                        self.ai.collect_feedback(self.current_job['job_id'], gpu_nonce, True)
+                self.gpu_is_mining = False
+            time.sleep(0.001) # Reduced sleep for higher throughput
+
     def start(self, autotune=True):
         self.client.on_new_job = self.handle_new_job
         if not self.v2:
@@ -163,6 +199,10 @@ class MinerController:
         # Start stats thread
         stats_thread = threading.Thread(target=self.stats_dashboard, daemon=True)
         stats_thread.start()
+
+        # Start GPU thread
+        gpu_thread = threading.Thread(target=self.gpu_mining_loop, daemon=True)
+        gpu_thread.start()
 
         # Start autotuner
         if autotune:
