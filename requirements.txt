@@ -1,3 +1,6 @@
 numpy
 scikit-learn
 flask
+cryptography
+noiseprotocol
+psutil
