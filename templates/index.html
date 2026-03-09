@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Litecoin Miner GUI</title>
+    <title>AI Litecoin Miner GUI V3</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>AI Litecoin Miner Dashboard</h1>
+            <h1>AI Litecoin Miner Dashboard <span id="protocol-v" class="protocol-badge">V1</span></h1>
             <div id="status-badge" class="badge">Checking...</div>
         </header>
 
@@ -27,8 +27,8 @@
                 <p id="shares">0</p>
             </div>
             <div class="stat-card">
-                <h3>AI Model Status</h3>
-                <p id="ai-status">Ready</p>
+                <h3>Threads (Auto)</h3>
+                <p id="threads">0</p>
             </div>
         </section>
 
@@ -48,8 +48,16 @@
                     <input type="text" name="user" id="user" placeholder="username.worker">
                 </div>
                 <div class="form-group">
-                    <label>Threads:</label>
-                    <input type="number" name="threads" id="threads" value="4">
+                    <label>Initial Threads:</label>
+                    <input type="number" name="threads" id="threads-in" value="4">
+                </div>
+                <div class="form-group checkbox-group">
+                    <input type="checkbox" name="v2" id="v2">
+                    <label for="v2">Enable Stratum V2</label>
+                </div>
+                <div class="form-group checkbox-group">
+                    <input type="checkbox" name="autotune" id="autotune" checked>
+                    <label for="autotune">Auto-Tuning</label>
                 </div>
                 <div class="btn-group">
                     <button type="button" id="start-btn" class="btn btn-primary">Start Mining</button>
@@ -74,7 +82,8 @@
                     document.getElementById('hashrate').textContent = data.hash_rate.toFixed(2) + ' H/s';
                     document.getElementById('total-hashes').textContent = data.total_hashes;
                     document.getElementById('shares').textContent = data.shares_found;
-                    document.getElementById('ai-status').textContent = data.ai_trained ? 'Trained & Predicting' : 'Training...';
+                    document.getElementById('threads').textContent = data.threads;
+                    document.getElementById('protocol-v').textContent = data.v2 ? 'V2' : 'V1';
 
                     const badge = document.getElementById('status-badge');
                     if (data.is_mining) {

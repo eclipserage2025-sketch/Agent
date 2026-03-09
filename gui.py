@@ -20,14 +20,18 @@ def get_stats():
             'hash_rate': miner_instance.hash_rate,
             'total_hashes': miner_instance.mp_miner.progress_counter.value,
             'shares_found': miner_instance.shares_found,
-            'ai_trained': miner_instance.ai.is_trained
+            'ai_trained': miner_instance.ai.is_trained,
+            'threads': miner_instance.mp_miner.num_processes,
+            'v2': miner_instance.v2
         })
     return jsonify({
         'is_mining': False,
         'hash_rate': 0.00,
         'total_hashes': 0,
         'shares_found': 0,
-        'ai_trained': False
+        'ai_trained': False,
+        'threads': 0,
+        'v2': False
     })
 
 @app.route('/start', methods=['POST'])
@@ -40,16 +44,18 @@ def start_miner():
     port = int(request.form.get('port', 3333))
     user = request.form.get('user')
     threads = int(request.form.get('threads', 4))
+    v2 = request.form.get('v2') == 'on'
+    autotune = request.form.get('autotune') == 'on'
 
     if not user:
         return jsonify({'status': 'Error: Missing worker username'}), 400
 
-    miner_instance = MinerController(host, port, user)
+    miner_instance = MinerController(host, port, user, v2=v2)
     miner_instance.mp_miner.num_processes = threads
 
     def run_miner():
         try:
-            miner_instance.start()
+            miner_instance.start(autotune=autotune)
         except Exception as e:
             print(f"Miner thread error: {e}")
 
