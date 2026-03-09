@@ -24,6 +24,16 @@ header {
     padding-bottom: 20px;
 }
 
+.protocol-badge {
+    background: #6c757d;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    vertical-align: middle;
+    margin-left: 10px;
+}
+
 .badge {
     padding: 10px 15px;
     border-radius: 20px;
@@ -62,6 +72,16 @@ form {
 .form-group { display: flex; flex-direction: column; }
 .form-group label { margin-bottom: 5px; font-weight: bold; }
 .form-group input { padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
+
+.checkbox-group {
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+}
+
+.checkbox-group input {
+    width: auto;
+}
 
 .btn-group {
     grid-column: span 2;
