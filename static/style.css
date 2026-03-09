@@ -60,6 +60,9 @@ header {
 .stat-card h3 { margin: 0; color: #666; font-size: 1rem; }
 .stat-card p { font-size: 1.5rem; font-weight: bold; margin-top: 10px; color: #333; }
 
+.status-on { color: #28a745; }
+.status-off { color: #dc3545; }
+
 .controls, .log-section { margin-top: 40px; }
 
 form {

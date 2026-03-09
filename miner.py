@@ -8,6 +8,9 @@ from stratum_v2 import StratumV2Client
 from ai_model import AIMiner
 from worker import MultiProcessMiner
 from autotuner import AutoTuner
+from gpu_worker import GPUWorker
+from profit_manager import ProfitManager
+from miner_logger import logger
 
 def reverse_hex(hex_str):
     """Reverses byte order of a hex string."""
@@ -44,9 +47,13 @@ class MinerController:
 
         self.ai = AIMiner()
         self.mp_miner = MultiProcessMiner()
+        self.gpu_miner = GPUWorker()
         self.autotuner = AutoTuner(self)
+        self.profit_mgr = ProfitManager()
+
         self.is_mining = False
         self.current_job = None
+        self.current_coin = "LTC"
         self.target = 0x00000ffff0000000000000000000000000000000000000000000000000000000
         self.diff = 1
 
@@ -54,6 +61,7 @@ class MinerController:
         self.shares_found = 0
         self.start_time = time.time()
         self.hash_rate = 0
+        self.gpu_hash_rate = 0
         self.last_hashes_count = 0
         self.last_stats_time = time.time()
 
@@ -61,13 +69,10 @@ class MinerController:
         self.diff = diff
         target_max = 0x00000ffff0000000000000000000000000000000000000000000000000000000
         self.target = target_max // diff
-        print(f"Difficulty set to: {self.diff}")
+        logger.info(f"Difficulty set to: {self.diff}")
 
     def handle_new_job(self, params):
-        if self.v2:
-            # Handle SV2 Job Payload...
-            pass
-        else:
+        if not self.v2:
             self.current_job = {
                 'job_id': params[0],
                 'prevhash': params[1],
@@ -85,10 +90,8 @@ class MinerController:
             self.start_mp_work()
 
     def start_mp_work(self):
-        if self.current_job is None:
-            return
+        if self.current_job is None: return
 
-        # If V1, build header standard way
         if not self.v2:
             extranonce1 = getattr(self.client, 'extranonce1', None)
             if extranonce1 is None: return
@@ -109,11 +112,28 @@ class MinerController:
             header_base_bytes = binascii.unhexlify(header_base)
             job_id = self.current_job['job_id']
         else:
-            # Placeholder for SV2 job processing
             return
 
         start_nonce, end_nonce = self.ai.predict_nonce_range(job_id, range_size=100000)
+
+        # Priority 1: GPU
+        if self.gpu_miner.is_available:
+            results = self.gpu_miner.hash_range(header_base_bytes, start_nonce, 100000, self.target)
+            if results:
+                for nonce in results:
+                    self.submit_share(job_id, nonce)
+
+        # Priority 2: CPU (Multi-processed)
         self.mp_miner.start_mining(header_base_bytes, start_nonce, end_nonce, self.target)
+
+    def submit_share(self, job_id, nonce):
+        logger.info(f"Found SHARE! Nonce: {nonce}")
+        self.shares_found += 1
+        self.ai.collect_feedback(job_id, nonce, True)
+
+        if not self.v2:
+            extranonce2 = "00000001"
+            self.client.submit(self.client.username, job_id, extranonce2, self.current_job['ntime'], hex(nonce)[2:].zfill(8))
 
     def stats_dashboard(self):
         while self.is_mining:
@@ -125,27 +145,21 @@ class MinerController:
                 current_hashes = self.mp_miner.progress_counter.value
                 delta_hashes = current_hashes - self.last_hashes_count
                 self.hash_rate = delta_hashes / elapsed_delta
-
                 self.last_hashes_count = current_hashes
                 self.last_stats_time = now
 
-            print("\n" + "="*50)
-            print(f"AI MINER STATUS | V2: {self.v2} | Uptime: {int(elapsed_total)}s")
-            print(f"Hashrate: {self.hash_rate:.2f} H/s")
-            print(f"Total Hashes: {self.mp_miner.progress_counter.value}")
-            print(f"Shares Found: {self.shares_found} | Diff: {self.diff}")
-            print(f"Threads: {self.mp_miner.num_processes} (AutoTuned)")
-            print(f"AI Trained: {self.ai.is_trained}")
-            print("="*50)
-            time.sleep(5)
+            # Update GPU status
+            gpu_status = "ACTIVE" if self.gpu_miner.is_available else "OFF"
 
-    def start(self, autotune=True):
+            logger.info(f"STATUS | Coin: {self.current_coin} | GPU: {gpu_status} | Speed: {self.hash_rate:.2f} H/s")
+            time.sleep(10)
+
+    def start(self, autotune=True, profit_switch=True):
         self.client.on_new_job = self.handle_new_job
         if not self.v2:
             self.client.on_difficulty_change = self.set_difficulty
 
-        if not self.client.connect():
-            return
+        if not self.client.connect(): return
 
         self.client.start_listening()
         if self.v2:
@@ -160,33 +174,26 @@ class MinerController:
         self.is_mining = True
         self.last_stats_time = time.time()
 
-        # Start stats thread
         stats_thread = threading.Thread(target=self.stats_dashboard, daemon=True)
         stats_thread.start()
 
-        # Start autotuner
-        if autotune:
-            self.autotuner.start()
+        if autotune: self.autotuner.start()
 
-        # Main monitoring loop
         while self.is_mining:
             results = self.mp_miner.get_results()
             for nonce, hash_bytes in results:
-                print(f"\n[!] SHARE FOUND: {binascii.hexlify(hash_bytes).decode()}")
-                self.shares_found += 1
-                self.ai.collect_feedback(self.current_job['job_id'], nonce, True)
+                self.submit_share(self.current_job['job_id'], nonce)
 
-                if not self.v2:
-                    extranonce2 = "00000001"
-                    self.client.submit(self.client.username, self.current_job['job_id'], extranonce2, self.current_job['ntime'], hex(nonce)[2:].zfill(8))
-                else:
-                    # Submit SV2 share...
-                    pass
+            # Profitability Check
+            if profit_switch and self.profit_mgr.should_switch(self.current_coin):
+                logger.info("Profit Manager: Switching pools for better profitability...")
+                self.current_coin = self.profit_mgr.best_coin
+                # (Actual pool switch logic would go here)
 
             if self.current_job and not self.mp_miner.is_running():
                 self.start_mp_work()
 
-            time.sleep(0.5)
+            time.sleep(1)
 
     def stop(self):
         self.is_mining = False

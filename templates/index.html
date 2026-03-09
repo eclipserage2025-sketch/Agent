@@ -19,16 +19,16 @@
                 <p id="hashrate">0.00 H/s</p>
             </div>
             <div class="stat-card">
-                <h3>Total Hashes</h3>
-                <p id="total-hashes">0</p>
+                <h3>GPU Acceleration</h3>
+                <p id="gpu-active" class="status-off">OFF</p>
             </div>
             <div class="stat-card">
-                <h3>Shares Found</h3>
+                <h3>Best Coin (Profit)</h3>
+                <p id="best-coin">LTC</p>
+            </div>
+            <div class="stat-card">
+                <h3>Total Shares</h3>
                 <p id="shares">0</p>
-            </div>
-            <div class="stat-card">
-                <h3>Threads (Auto)</h3>
-                <p id="threads">0</p>
             </div>
         </section>
 
@@ -60,8 +60,8 @@
                     <label for="autotune">Auto-Tuning</label>
                 </div>
                 <div class="form-group checkbox-group">
-                    <input type="checkbox" name="autostart" id="autostart" {{ 'checked' if config.autostart }}>
-                    <label for="autostart">Auto-Start on GUI Launch</label>
+                    <input type="checkbox" name="profit_switch" id="profit_switch" {{ 'checked' if config.profit_switch or config.profit_switch is none }}>
+                    <label for="profit_switch">Profit-Based Switching</label>
                 </div>
                 <div class="btn-group">
                     <button type="button" id="start-btn" class="btn btn-primary">Start Mining</button>
@@ -84,10 +84,18 @@
                 .then(response => response.json())
                 .then(data => {
                     document.getElementById('hashrate').textContent = data.hash_rate.toFixed(2) + ' H/s';
-                    document.getElementById('total-hashes').textContent = data.total_hashes;
                     document.getElementById('shares').textContent = data.shares_found;
-                    document.getElementById('threads').textContent = data.threads;
                     document.getElementById('protocol-v').textContent = data.v2 ? 'V2' : 'V1';
+                    document.getElementById('best-coin').textContent = data.best_coin;
+
+                    const gpuBadge = document.getElementById('gpu-active');
+                    if (data.gpu_active) {
+                        gpuBadge.textContent = 'ACTIVE';
+                        gpuBadge.className = 'status-on';
+                    } else {
+                        gpuBadge.textContent = 'OFF';
+                        gpuBadge.className = 'status-off';
+                    }
 
                     const badge = document.getElementById('status-badge');
                     if (data.is_mining) {
