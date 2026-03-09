@@ -1,27 +1,59 @@
+:root {
+    --bg-color: #f4f7f6;
+    --container-bg: #fff;
+    --text-color: #333;
+    --text-secondary: #666;
+    --card-bg: #e9ecef;
+    --border-color: #eee;
+    --header-border: #eee;
+    --log-bg: #212529;
+    --log-text: #00ff00;
+}
+
+[data-theme="dark"] {
+    --bg-color: #121212;
+    --container-bg: #1e1e1e;
+    --text-color: #e0e0e0;
+    --text-secondary: #b0b0b0;
+    --card-bg: #2d2d2d;
+    --border-color: #444;
+    --header-border: #333;
+    --log-bg: #000;
+    --log-text: #00ff00;
+}
+
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background-color: #f4f7f6;
+    background-color: var(--bg-color);
+    color: var(--text-color);
     margin: 0;
     display: flex;
     justify-content: center;
     padding: 20px;
+    transition: background-color 0.3s, color 0.3s;
 }
 
 .container {
-    max-width: 1000px;
+    max-width: 1100px;
     width: 100%;
-    background: #fff;
+    background: var(--container-bg);
     padding: 30px;
     border-radius: 12px;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
 }
 
 header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 2px solid #eee;
+    border-bottom: 2px solid var(--header-border);
     padding-bottom: 20px;
+}
+
+.header-controls {
+    display: flex;
+    gap: 15px;
+    align-items: center;
 }
 
 .protocol-badge {
@@ -43,38 +75,76 @@ header {
 .badge.active { background-color: #28a745; color: white; }
 .badge.stopped { background-color: #dc3545; color: white; }
 
+.tabs {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.tab-btn {
+    padding: 10px 20px;
+    border: none;
+    background: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-weight: bold;
+    border-bottom: 3px solid transparent;
+}
+
+.tab-btn.active {
+    color: #007bff;
+    border-bottom-color: #007bff;
+}
+
+.tab-content {
+    display: none;
+    padding-top: 20px;
+}
+
+.tab-content.active {
+    display: block;
+}
+
 .stats-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 20px;
-    margin: 30px 0;
+    margin: 20px 0;
 }
 
 .stat-card {
-    background: #e9ecef;
+    background: var(--card-bg);
     padding: 20px;
     border-radius: 10px;
     text-align: center;
 }
 
-.stat-card h3 { margin: 0; color: #666; font-size: 1rem; }
-.stat-card p { font-size: 1.5rem; font-weight: bold; margin-top: 10px; color: #333; }
+.stat-card h3 { margin: 0; color: var(--text-secondary); font-size: 1rem; }
+.stat-card p { font-size: 1.5rem; font-weight: bold; margin-top: 10px; color: var(--text-color); }
 
 .status-on { color: #28a745; }
 .status-off { color: #dc3545; }
 
-.controls, .log-section { margin-top: 40px; }
+.chart-container {
+    background: var(--card-bg);
+    padding: 20px;
+    border-radius: 10px;
+    margin: 20px 0;
+    height: 300px;
+}
+
+.controls, .log-section, .ai-section { margin-top: 20px; }
 
 form {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 20px;
-    margin-top: 20px;
 }
 
 .form-group { display: flex; flex-direction: column; }
 .form-group label { margin-bottom: 5px; font-weight: bold; }
-.form-group input { padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
+.form-group input { padding: 10px; border: 1px solid var(--border-color); border-radius: 5px; background: var(--container-bg); color: var(--text-color); }
 
 .checkbox-group {
     flex-direction: row;
@@ -90,7 +160,7 @@ form {
     grid-column: span 2;
     display: flex;
     gap: 15px;
-    margin-top: 20px;
+    margin-top: 10px;
 }
 
 .btn {
@@ -105,14 +175,23 @@ form {
 
 .btn-primary { background-color: #007bff; color: white; }
 .btn-danger { background-color: #dc3545; color: white; }
+.btn-secondary { background-color: #6c757d; color: white; }
 .btn:hover { opacity: 0.9; }
 
 .log-window {
-    background: #212529;
-    color: #00ff00;
+    background: var(--log-bg);
+    color: var(--log-text);
     padding: 15px;
     border-radius: 8px;
-    height: 150px;
+    height: 250px;
     overflow-y: auto;
     font-family: 'Courier New', Courier, monospace;
+}
+
+.theme-toggle {
+    cursor: pointer;
+    font-size: 1.2rem;
+    background: none;
+    border: none;
+    color: var(--text-color);
 }

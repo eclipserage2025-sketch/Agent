@@ -1,136 +1,140 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Litecoin Miner Pro</title>
+    <title>AI Litecoin Miner Ultra V4</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>AI Litecoin Miner Pro <span id="protocol-v" class="protocol-badge">V1</span></h1>
-            <div id="status-badge" class="badge">Checking...</div>
+            <h1>AI Miner Ultra <span id="protocol-v" class="protocol-badge">V1</span></h1>
+            <div class="header-controls">
+                <button id="theme-toggle" class="theme-toggle">🌓</button>
+                <div id="status-badge" class="badge">Checking...</div>
+            </div>
         </header>
 
-        <section class="stats-grid">
-            <div class="stat-card">
-                <h3>Hashrate</h3>
-                <p id="hashrate">0.00 H/s</p>
-            </div>
-            <div class="stat-card">
-                <h3>GPU Acceleration</h3>
-                <p id="gpu-active" class="status-off">OFF</p>
-            </div>
-            <div class="stat-card">
-                <h3>Best Coin (Profit)</h3>
-                <p id="best-coin">LTC</p>
-            </div>
-            <div class="stat-card">
-                <h3>Total Shares</h3>
-                <p id="shares">0</p>
-            </div>
-        </section>
+        <nav class="tabs">
+            <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+            <button class="tab-btn" data-tab="config">Configuration</button>
+            <button class="tab-btn" data-tab="ai-insights">AI Insights</button>
+            <button class="tab-btn" data-tab="logs">Activity Logs</button>
+        </nav>
 
-        <section class="controls">
-            <h2>Miner Configuration</h2>
-            <form id="config-form">
-                <div class="form-group">
-                    <label>Pool Host:</label>
-                    <input type="text" name="host" id="host" value="{{ config.host }}">
+        <!-- DASHBOARD TAB -->
+        <div id="dashboard" class="tab-content active">
+            <section class="stats-grid">
+                <div class="stat-card">
+                    <h3>Hashrate</h3>
+                    <p id="hashrate">0.00 H/s</p>
                 </div>
-                <div class="form-group">
-                    <label>Pool Port:</label>
-                    <input type="number" name="port" id="port" value="{{ config.port }}">
+                <div class="stat-card">
+                    <h3>GPU</h3>
+                    <p id="gpu-active" class="status-off">OFF</p>
                 </div>
-                <div class="form-group">
-                    <label>Worker Username:</label>
-                    <input type="text" name="user" id="user" value="{{ config.user }}" placeholder="username.worker">
+                <div class="stat-card">
+                    <h3>Best Coin</h3>
+                    <p id="best-coin">LTC</p>
                 </div>
-                <div class="form-group">
-                    <label>Initial Threads:</label>
-                    <input type="number" name="threads" id="threads-in" value="{{ config.threads }}">
+                <div class="stat-card">
+                    <h3>Total Shares</h3>
+                    <p id="shares">0</p>
                 </div>
-                <div class="form-group checkbox-group">
-                    <input type="checkbox" name="v2" id="v2" {{ 'checked' if config.v2 }}>
-                    <label for="v2">Enable Stratum V2</label>
-                </div>
-                <div class="form-group checkbox-group">
-                    <input type="checkbox" name="autotune" id="autotune" {{ 'checked' if config.autotune }}>
-                    <label for="autotune">Auto-Tuning</label>
-                </div>
-                <div class="form-group checkbox-group">
-                    <input type="checkbox" name="profit_switch" id="profit_switch" {{ 'checked' if config.profit_switch or config.profit_switch is none }}>
-                    <label for="profit_switch">Profit-Based Switching</label>
-                </div>
-                <div class="btn-group">
-                    <button type="button" id="start-btn" class="btn btn-primary">Start Mining</button>
-                    <button type="button" id="stop-btn" class="btn btn-danger">Stop Mining</button>
-                </div>
-            </form>
-        </section>
+            </section>
 
-        <section class="log-section">
-            <h2>Recent Activity</h2>
-            <div id="logs" class="log-window">
-                <p>Waiting for activity...</p>
+            <div class="chart-container">
+                <canvas id="hashrateChart"></canvas>
             </div>
-        </section>
+        </div>
+
+        <!-- CONFIGURATION TAB -->
+        <div id="config" class="tab-content">
+            <section class="controls">
+                <form id="config-form">
+                    <div class="form-group">
+                        <label>Pool Host:</label>
+                        <input type="text" name="host" value="{{ config.host }}">
+                    </div>
+                    <div class="form-group">
+                        <label>Pool Port:</label>
+                        <input type="number" name="port" value="{{ config.port }}">
+                    </div>
+                    <div class="form-group">
+                        <label>Worker Username:</label>
+                        <input type="text" name="user" value="{{ config.user }}" placeholder="username.worker">
+                    </div>
+                    <div class="form-group">
+                        <label>Initial Threads:</label>
+                        <input type="number" name="threads" value="{{ config.threads }}">
+                    </div>
+                    <div class="form-group checkbox-group">
+                        <input type="checkbox" name="v2" id="v2" {{ 'checked' if config.v2 }}>
+                        <label for="v2">Enable Stratum V2</label>
+                    </div>
+                    <div class="form-group checkbox-group">
+                        <input type="checkbox" name="autotune" id="autotune" {{ 'checked' if config.autotune }}>
+                        <label for="autotune">Auto-Tuning</label>
+                    </div>
+                    <div class="form-group checkbox-group">
+                        <input type="checkbox" name="profit_switch" id="profit_switch" {{ 'checked' if config.profit_switch or config.profit_switch is none }}>
+                        <label for="profit_switch">Profit-Based Switching</label>
+                    </div>
+                    <div class="form-group checkbox-group">
+                        <input type="checkbox" name="autostart" id="autostart" {{ 'checked' if config.autostart }}>
+                        <label for="autostart">Auto-Start on Launch</label>
+                    </div>
+                    <div class="btn-group">
+                        <button type="button" id="start-btn" class="btn btn-primary">Start Mining</button>
+                        <button type="button" id="stop-btn" class="btn btn-danger">Stop Mining</button>
+                    </div>
+                </form>
+            </section>
+        </div>
+
+        <!-- AI INSIGHTS TAB -->
+        <div id="ai-insights" class="tab-content">
+            <section class="ai-section">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h3>Model Type</h3>
+                        <p>MLP Neural Net</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Status</h3>
+                        <p id="ai-status-text">Training...</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Accuracy</h3>
+                        <p id="ai-accuracy">0.0%</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Range coverage</h3>
+                        <p id="ai-range">100k</p>
+                    </div>
+                </div>
+                <div class="log-window" style="height: 150px; background: #2c3e50; color: #ecf0f1;">
+                    <p>AI analyzing PoW patterns...</p>
+                    <p id="ai-prediction-log">Waiting for job feedback...</p>
+                </div>
+            </section>
+        </div>
+
+        <!-- LOGS TAB -->
+        <div id="logs-tab" class="tab-content">
+            <section class="log-section">
+                <div id="logs" class="log-window">
+                    <p>Initializing system logs...</p>
+                </div>
+                <div class="btn-group" style="margin-top: 10px;">
+                    <button id="clear-logs" class="btn btn-secondary btn-sm">Clear Display</button>
+                </div>
+            </section>
+        </div>
     </div>
 
-    <script>
-        function updateStats() {
-            fetch('/stats')
-                .then(response => response.json())
-                .then(data => {
-                    document.getElementById('hashrate').textContent = data.hash_rate.toFixed(2) + ' H/s';
-                    document.getElementById('shares').textContent = data.shares_found;
-                    document.getElementById('protocol-v').textContent = data.v2 ? 'V2' : 'V1';
-                    document.getElementById('best-coin').textContent = data.best_coin;
-
-                    const gpuBadge = document.getElementById('gpu-active');
-                    if (data.gpu_active) {
-                        gpuBadge.textContent = 'ACTIVE';
-                        gpuBadge.className = 'status-on';
-                    } else {
-                        gpuBadge.textContent = 'OFF';
-                        gpuBadge.className = 'status-off';
-                    }
-
-                    const badge = document.getElementById('status-badge');
-                    if (data.is_mining) {
-                        badge.textContent = 'Mining Active';
-                        badge.className = 'badge active';
-                    } else {
-                        badge.textContent = 'Miner Stopped';
-                        badge.className = 'badge stopped';
-                    }
-                });
-        }
-
-        function updateLogs() {
-            fetch('/logs')
-                .then(response => response.json())
-                .then(data => {
-                    const logWindow = document.getElementById('logs');
-                    logWindow.innerHTML = data.map(log => `<p>${log}</p>`).join('');
-                    logWindow.scrollTop = logWindow.scrollHeight;
-                });
-        }
-
-        document.getElementById('start-btn').onclick = () => {
-            const formData = new FormData(document.getElementById('config-form'));
-            fetch('/start', { method: 'POST', body: formData });
-        };
-
-        document.getElementById('stop-btn').onclick = () => {
-            fetch('/stop', { method: 'POST' });
-        };
-
-        setInterval(updateStats, 2000);
-        setInterval(updateLogs, 3000);
-        updateStats();
-        updateLogs();
-    </script>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>
