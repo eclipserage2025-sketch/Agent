@@ -21,6 +21,7 @@ def get_stats():
             'total_hashes': miner_instance.mp_miner.progress_counter.value,
             'shares_found': miner_instance.shares_found,
             'ai_trained': miner_instance.ai.is_trained,
+            'ai_samples': getattr(miner_instance.ai, 'total_samples', 0),
             'threads': miner_instance.mp_miner.num_processes,
             'cpu_temp': miner_instance.autotuner.get_max_temp()
         })
@@ -30,6 +31,7 @@ def get_stats():
         'total_hashes': 0,
         'shares_found': 0,
         'ai_trained': False,
+        'ai_samples': 0,
         'threads': 0,
         'cpu_temp': None
     })

@@ -18,13 +18,13 @@ def test_frontend():
             assert "AI Monero Miner GUI V4" in page.title()
 
             # Verify specific Monero elements
-            assert page.is_visible("text=RandomX")
+            assert page.is_visible("text=Self-Learning")
             assert page.is_visible("text=CPU Temp")
             assert page.is_visible("text=Monero Address")
 
             # Take a screenshot
-            page.screenshot(path="frontend_monero.png")
-            print("Screenshot saved to frontend_monero.png")
+            page.screenshot(path="frontend_self_learning.png")
+            print("Screenshot saved to frontend_self_learning.png")
 
             browser.close()
     finally:

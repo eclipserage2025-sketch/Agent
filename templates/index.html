@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Monero Miner GUI V4</title>
+    <title>AI Monero Miner GUI V4 - Self-Learning Edition</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>AI Monero Miner Dashboard <span id="protocol-v" class="protocol-badge">RandomX</span></h1>
+            <h1>AI Monero Miner Dashboard <span id="protocol-v" class="protocol-badge">Self-Learning</span></h1>
             <div id="status-badge" class="badge">Checking...</div>
         </header>
 
@@ -27,7 +27,7 @@
                 <p id="shares">0</p>
             </div>
             <div class="stat-card">
-                <h3>Threads (Auto)</h3>
+                <h3>Threads (AI)</h3>
                 <p id="threads">0</p>
             </div>
         </section>
@@ -57,7 +57,7 @@
                 </div>
                 <div class="form-group checkbox-group">
                     <input type="checkbox" name="autotune" id="autotune" checked>
-                    <label for="autotune">AI Auto-Tuning & Throttling</label>
+                    <label for="autotune">AI Self-Learning & Auto-Tuning</label>
                 </div>
                 <div class="btn-group">
                     <button type="button" id="start-btn" class="btn btn-primary">Start Mining</button>
@@ -67,9 +67,10 @@
         </section>
 
         <section class="log-section">
-            <h2>AI Status</h2>
+            <h2>AI Learning Status</h2>
             <div class="stat-card" style="width: 100%;">
-                <p>AI Neural Network Trained: <span id="ai-trained">No</span></p>
+                <p>Neural Model Trained: <span id="ai-trained">No</span></p>
+                <p>Knowledge Base: <span id="ai-samples">0</span> experience samples</p>
                 <p>Total Hashes Processed: <span id="total-hashes">0</span></p>
             </div>
         </section>
@@ -85,7 +86,8 @@
                     document.getElementById('shares').textContent = data.shares_found;
                     document.getElementById('threads').textContent = data.threads;
                     document.getElementById('temp').textContent = (data.cpu_temp ? data.cpu_temp.toFixed(1) : '--') + ' °C';
-                    document.getElementById('ai-trained').textContent = data.ai_trained ? 'Yes' : 'No';
+                    document.getElementById('ai-trained').textContent = data.ai_trained ? 'Yes (Persistent)' : 'No';
+                    document.getElementById('ai-samples').textContent = data.ai_samples;
 
                     const badge = document.getElementById('status-badge');
                     if (data.is_mining) {
