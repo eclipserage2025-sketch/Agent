@@ -10,24 +10,26 @@ class AutoTuner:
         self.last_tuning_time = time.time()
         self.temp_threshold = 80  # Celsius
         self.load_threshold = 0.8 # 80% per core
+        self.is_throttled = False
+        self.original_threads = multiprocessing.cpu_count()
 
     def get_max_temp(self):
+        # Using miner's health monitor if available, otherwise fallback
+        if hasattr(self.miner, 'health'):
+            return self.miner.health.get_cpu_temp()
+
         try:
             temps = psutil.sensors_temperatures()
-            if not temps:
-                return None
-
+            if not temps: return None
             max_t = 0
             for name, entries in temps.items():
                 for entry in entries:
-                    if entry.current > max_t:
-                        max_t = entry.current
+                    if entry.current > max_t: max_t = entry.current
             return max_t
         except Exception:
             return None
 
     def get_system_load(self):
-        # returns 1-minute load average normalized by CPU count
         try:
             load1, _, _ = os.getloadavg()
             cpu_count = multiprocessing.cpu_count()
@@ -36,37 +38,39 @@ class AutoTuner:
             return 0.5
 
     def tune(self):
-        """
-        Main auto-tuning loop with thermal and load monitoring.
-        """
         while self.running:
             now = time.time()
-            if now - self.last_tuning_time > 20: # Tune every 20s
+            if now - self.last_tuning_time > 20:
                 load = self.get_system_load()
                 temp = self.get_max_temp()
                 current_threads = self.miner.mp_miner.num_processes
 
-                print(f"[AutoTuning] Load: {load:.2f}, Temp: {temp if temp else 'N/A'}°C, Threads: {current_threads}")
+                # Check for 80C threshold
+                if temp and temp >= self.temp_threshold:
+                    if not self.is_throttled:
+                        self.is_throttled = True
+                        # User requested a 20% decrease in intensity
+                        new_threads = max(1, int(current_threads * 0.8))
+                        print(f"[AutoTuning] Thermal alert ({temp}°C >= 80°C)! Throttling intensity by 20%: {current_threads} -> {new_threads}")
+                        self.miner.update_threads(new_threads)
+                    else:
+                        # Already throttled, maybe AI wants to reduce further?
+                        if self.miner.ai and self.miner.ai.is_trained:
+                            opt_threads = self.miner.ai.predict_optimal_threads(load, temp, current_threads)
+                            if opt_threads < current_threads:
+                                print(f"[AutoTuning] AI suggesting further reduction to {opt_threads} due to heat.")
+                                self.miner.update_threads(opt_threads)
+                else:
+                    # Auto Restore logic: Restore if temp is safely below threshold (e.g., < 75C)
+                    if self.is_throttled and (not temp or temp < self.temp_threshold - 5):
+                        self.is_throttled = False
+                        # Let AI decide the best way to restore
+                        if self.miner.ai and self.miner.ai.is_trained:
+                            new_threads = self.miner.ai.predict_optimal_threads(load, temp, current_threads)
+                        else:
+                            new_threads = min(multiprocessing.cpu_count(), int(current_threads / 0.8))
 
-                should_reduce = False
-                reason = ""
-
-                if load > self.load_threshold:
-                    should_reduce = True
-                    reason = "High Load"
-
-                if temp and temp > self.temp_threshold:
-                    should_reduce = True
-                    reason = "High Temperature"
-
-                if should_reduce and current_threads > 1:
-                    new_threads = current_threads - 1
-                    print(f"[AutoTuning] {reason}, reducing threads to {new_threads}")
-                    self.miner.update_threads(new_threads)
-                elif not should_reduce and load < 0.4 and (not temp or temp < self.temp_threshold - 10):
-                    if current_threads < multiprocessing.cpu_count():
-                        new_threads = current_threads + 1
-                        print(f"[AutoTuning] Low usage, increasing threads to {new_threads}")
+                        print(f"[AutoTuning] Temperature stabilized ({temp if temp else 'N/A'}°C). Restoring intensity to {new_threads}.")
                         self.miner.update_threads(new_threads)
 
                 # Collect feedback for AI optimization
@@ -87,4 +91,4 @@ class AutoTuner:
         self.running = False
 
 if __name__ == "__main__":
-    print("Enhanced AutoTuner with thermal monitoring defined.")
+    print("AI-Controlled AutoTuner with thermal throttling and auto-restore defined.")

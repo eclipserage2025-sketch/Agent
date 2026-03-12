@@ -6,6 +6,7 @@ from stratum import MoneroStratumClient
 from ai_model import AIMiner
 from worker import MultiProcessMiner
 from autotuner import AutoTuner
+from health_check import HealthMonitor
 
 class MinerController:
     def __init__(self, host, port, username, password="x"):
@@ -18,6 +19,7 @@ class MinerController:
         self.ai = AIMiner()
         self.mp_miner = MultiProcessMiner()
         self.autotuner = AutoTuner(self)
+        self.health = HealthMonitor()
 
         self.is_mining = False
         self.current_job = None
@@ -32,12 +34,9 @@ class MinerController:
 
     def handle_new_job(self, job):
         self.current_job = job
-        # Monero target is often provided as hex string
         target_hex = job.get('target')
         if target_hex:
-            # Monero targets in Stratum are often 4-byte hex or full 32-byte hex
             if len(target_hex) == 8:
-                # 4-byte target (e.g. "ffffffff")
                 self.target = int.from_bytes(binascii.unhexlify(target_hex), 'little')
             else:
                 self.target = int(target_hex, 16)
@@ -55,7 +54,6 @@ class MinerController:
         blob = self.current_job['blob']
         seed_hash = self.current_job['seed_hash']
 
-        # Start hashing from a random nonce range
         import random
         start_nonce = random.randint(0, 0x7FFFFFFF)
         end_nonce = start_nonce + 1000000
@@ -65,6 +63,7 @@ class MinerController:
     def update_threads(self, num):
         if num == self.mp_miner.num_processes:
             return
+        print(f"[MinerController] Updating thread count to {num}")
         self.mp_miner.num_processes = num
         if self.is_mining:
             self.mp_miner.stop_mining()
@@ -93,6 +92,22 @@ class MinerController:
             print("="*50)
             time.sleep(10)
 
+    def monitor_health(self):
+        """Monitors health every 30 seconds as requested."""
+        while self.is_mining:
+            status, temp = self.health.check_status()
+            if status == 2: # Critical
+                print(f"[CRITICAL] Temperature {temp}°C exceeded 90°C! Gracefully stopping miner.")
+                # We stop the controller's mining status but keep the thread alive if needed
+                # (though here we call stop which shuts everything down)
+                self.stop()
+                break
+            elif status == 1: # Throttling
+                print(f"[WARNING] Temperature {temp}°C exceeded 80°C. Throttling intensity.")
+                # Intensity reduction is handled by AutoTuner/AI which we will update next
+
+            time.sleep(30)
+
     def start(self, autotune=True):
         self.client.on_new_job = self.handle_new_job
 
@@ -108,6 +123,10 @@ class MinerController:
         # Start stats thread
         stats_thread = threading.Thread(target=self.stats_dashboard, daemon=True)
         stats_thread.start()
+
+        # Start health monitor thread
+        health_thread = threading.Thread(target=self.monitor_health, daemon=True)
+        health_thread.start()
 
         # Start autotuner
         if autotune:
@@ -133,4 +152,4 @@ class MinerController:
         self.autotuner.stop()
 
 if __name__ == "__main__":
-    print("MinerController for Monero defined.")
+    print("MinerController for Monero with health monitoring defined.")
