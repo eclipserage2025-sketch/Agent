@@ -4,14 +4,20 @@ A Python-based AI CPU mining client designed for Monero (XMR) using the RandomX 
 
 ## Features
 - **RandomX Hashing**: Integrated high-performance RandomX support via Python bindings.
-- **AI-Throttling**: Real-time thermal and system-load monitoring using an AI Neural Network to adjust mining intensity (thread count) dynamically.
+- **AI Self-Learning**: Real-time thermal and system-load monitoring using a persistent MLP Neural Network to optimize efficiency.
 - **Monero Stratum Protocol**: Dedicated support for Monero-specific Stratum pools (JSON-RPC 2.0).
-- **Agentic Architecture**: Modular design for easy extensibility and autonomous updates.
-- **Web GUI**: Real-time dashboard with hashrate, CPU temperature, and AI status.
+- **Pro Miner Dashboard**: Modern React-based Web GUI with real-time hashrate and temperature charts.
+- **Autonomous Throttling**: Automatic intensity adjustment at 80°C and safety shutdown at 90°C.
 
 ## Installation
+### Windows
+See the [Windows Installation Guide](WINDOWS_INSTALL.md) for automated setup scripts.
+
+### Linux
 ```bash
 pip install -r requirements.txt
+cd frontend && npm install && npm run build && cd ..
+python3 main.py --gui
 ```
 
 ## Usage
