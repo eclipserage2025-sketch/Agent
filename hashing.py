@@ -1,22 +1,42 @@
-import hashlib
+import randomx
+import binascii
 
-def scrypt_hash(header):
-    """
-    Litecoin uses Scrypt with parameters N=1024, r=1, p=1.
-    The header is a serialized 80-byte block header.
-    The result is a 32-byte hash (little-endian).
-    """
-    # hashlib.scrypt(password, salt, n, r, p, maxmem=0, dklen=64)
-    # For Litecoin, the salt is the same as the password.
-    # However, some implementations treat it differently.
-    # Standard Scrypt for LTC is scrypt(header, header, 1024, 1, 1, 32).
-    return hashlib.scrypt(header, salt=header, n=1024, r=1, p=1, dklen=32)
+class RandomXHasher:
+    def __init__(self):
+        self.flags = randomx.get_flags()
+        self.vm = None
+        self.cache = None
+        self.current_key = None
 
-def double_sha256(data):
-    return hashlib.sha256(hashlib.sha256(data).digest()).digest()
+    def init_vm(self, key_bytes):
+        if self.current_key == key_bytes and self.vm:
+            return
+
+        # In Monero, the key for RandomX is the seed hash
+        self.cache = randomx.Cache(self.flags)
+        self.cache.init(key_bytes)
+        self.vm = randomx.VM(self.flags, self.cache)
+        self.current_key = key_bytes
+
+    def hash(self, blob_bytes):
+        if not self.vm:
+            raise ValueError("RandomX VM not initialized. Call init_vm first.")
+        # calculate_hash returns the hash bytes if output is NULL (default)
+        return self.vm.calculate_hash(blob_bytes)
+
+# Global hasher instance for ease of use in workers
+_hasher = RandomXHasher()
+
+def randomx_init(key_bytes):
+    _hasher.init_vm(key_bytes)
+
+def randomx_hash(blob_bytes):
+    return _hasher.hash(blob_bytes)
 
 if __name__ == "__main__":
-    # Test with 80-byte dummy header
-    header = b"0" * 80
-    h = scrypt_hash(header)
-    print(f"Scrypt Hash: {h.hex()}")
+    # Test RandomX
+    key = b"test key"
+    blob = b"test blob"
+    randomx_init(key)
+    h = randomx_hash(blob)
+    print(f"RandomX Hash: {binascii.hexlify(h).decode()}")

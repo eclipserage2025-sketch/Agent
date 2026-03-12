@@ -1,30 +1,36 @@
 import numpy as np
 from sklearn.neural_network import MLPRegressor
-import random
 import time
 
 class AIMiner:
     def __init__(self):
-        # Multi-layer Perceptron (MLP) for more sophisticated predictions
+        # AI to predict optimal intensity/thread count
+        # Inputs: [Current Load, Current Temp, Last Hashrate]
+        # Output: [Optimal Threads]
         self.model = MLPRegressor(
-            hidden_layer_sizes=(10, 5),
+            hidden_layer_sizes=(8, 4),
             activation='relu',
             solver='adam',
-            max_iter=1000,
+            max_iter=500,
             warm_start=True
         )
         self.training_data_x = []
         self.training_data_y = []
         self.is_trained = False
+        self.last_hashrate = 0
 
-    def collect_feedback(self, job_id, nonce, success):
-        # Features: (Job hash, Time, Worker Load, etc.)
-        feature = [hash(job_id) % 1000, time.time() % 1000]
+    def collect_system_metrics(self, load, temp, threads):
+        # Normalize inputs for better training
+        temp_val = temp if temp else 50.0
+        feature = [load, temp_val / 100.0, self.last_hashrate / 1000.0]
+
+        # We target a thread count that keeps system usable and cool
+        # For simplicity, we use the current 'successful' thread count as a label
+        # In a more advanced version, we'd label based on 'hashrate per watt' or 'hashrate stability'
         self.training_data_x.append(feature)
-        self.training_data_y.append(nonce)
+        self.training_data_y.append(threads)
 
-        # Train every 5 samples
-        if len(self.training_data_x) >= 5 and len(self.training_data_x) % 5 == 0:
+        if len(self.training_data_x) >= 10 and len(self.training_data_x) % 10 == 0:
             X = np.array(self.training_data_x)
             y = np.array(self.training_data_y)
             try:
@@ -33,25 +39,24 @@ class AIMiner:
             except Exception as e:
                 print(f"Error training AI: {e}")
 
-    def predict_nonce_range(self, job_id, range_size=10000):
+    def predict_optimal_threads(self, load, temp, current_threads):
         if not self.is_trained:
-            start = random.randint(0, 0xFFFFFFFF - range_size)
-            return start, start + range_size
+            return current_threads
 
-        feature = [[hash(job_id) % 1000, time.time() % 1000]]
+        temp_val = temp if temp else 50.0
+        feature = [[load, temp_val / 100.0, self.last_hashrate / 1000.0]]
         try:
-            predicted_nonce = int(self.model.predict(feature)[0])
-            start = max(0, min(0xFFFFFFFF - range_size, predicted_nonce - (range_size // 2)))
-            return start, start + range_size
+            predicted = self.model.predict(feature)[0]
+            # Ensure predicted threads is within sensible bounds
+            import multiprocessing
+            cpu_count = multiprocessing.cpu_count()
+            return int(np.clip(predicted, 1, cpu_count))
         except Exception:
-            start = random.randint(0, 0xFFFFFFFF - range_size)
-            return start, start + range_size
+            return current_threads
+
+    def set_last_hashrate(self, hr):
+        self.last_hashrate = hr
 
 if __name__ == "__main__":
     ai = AIMiner()
-    job_id = "test_job"
-    for i in range(10):
-        ai.collect_feedback(job_id, random.randint(0, 1000000), True)
-
-    start, end = ai.predict_nonce_range(job_id)
-    print(f"Neural Network Predicted Range: {start} to {end}")
+    print("AI Model for Resource Optimization defined.")

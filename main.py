@@ -1,20 +1,19 @@
 import argparse
 import sys
-import time
 import signal
 from miner import MinerController
 from gui import run_gui
 
 def main():
-    parser = argparse.ArgumentParser(description="ULTIMATE AI LITECOIN MINER")
+    parser = argparse.ArgumentParser(description="ULTIMATE AI MONERO MINER (RANDOMX)")
     parser.add_argument("--gui", action="store_true", help="Start the miner in Web GUI mode")
-    parser.add_argument("--v2", action="store_true", help="Enable Stratum V2")
     parser.add_argument("--autotune", action="store_true", default=True, help="Enable auto-tuning (default: True)")
     parser.add_argument("--no-autotune", dest="autotune", action="store_false", help="Disable auto-tuning")
 
-    parser.add_argument("--host", default="litecoinpool.org", help="Pool host")
+    parser.add_argument("--host", default="pool.supportxmr.com", help="Pool host")
     parser.add_argument("--port", type=int, default=3333, help="Pool port")
-    parser.add_argument("--user", help="Worker username (e.g., username.worker)")
+    parser.add_argument("--user", help="Monero address / worker name")
+    parser.add_argument("--pass", dest="password", default="x", help="Pool password")
     parser.add_argument("--threads", type=int, default=None, help="Number of mining threads")
 
     args = parser.parse_args()
@@ -26,12 +25,12 @@ def main():
     if not args.user:
         parser.error("--user is required for CLI mode. Use --gui to start in web mode.")
 
-    controller = MinerController(args.host, args.port, args.user, v2=args.v2)
+    controller = MinerController(args.host, args.port, args.user, password=args.password)
     if args.threads:
         controller.mp_miner.num_processes = args.threads
 
     def signal_handler(sig, frame):
-        print("\nExiting miner...")
+        print("\nExiting AI Monero Miner...")
         controller.stop()
         sys.exit(0)
 

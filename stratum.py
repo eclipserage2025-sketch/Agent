@@ -2,33 +2,27 @@ import socket
 import json
 import threading
 import time
-import errno
+import binascii
 
-class StratumClient:
+class MoneroStratumClient:
     def __init__(self, host, port, username, password="x"):
         self.host = host
         self.port = port
         self.username = username
         self.password = password
         self.sock = None
-        self.sock_file = None
         self.message_id = 1
-        self.subscription_details = None
-        self.extranonce1 = None
-        self.extranonce2_size = None
-        self.authorized = False
-        self.on_new_job = None
-        self.on_difficulty_change = None
         self.running = False
         self.is_connected = False
+        self.job = None
+        self.on_new_job = None
+        self.worker_id = None
 
     def connect(self):
         try:
-            print(f"Connecting to {self.host}:{self.port}...")
+            print(f"Connecting to {self.host}:{self.port} (Monero Stratum)...")
             self.sock = socket.create_connection((self.host, self.port), timeout=10)
-            self.sock_file = self.sock.makefile('r')
             self.is_connected = True
-            print("Connected.")
             return True
         except Exception as e:
             print(f"Connection failed: {e}")
@@ -38,9 +32,9 @@ class StratumClient:
     def send_request(self, method, params):
         if not self.is_connected:
             return False
-
         request = {
             "id": self.message_id,
+            "jsonrpc": "2.0",
             "method": method,
             "params": params
         }
@@ -53,59 +47,67 @@ class StratumClient:
             self.is_connected = False
             return False
 
-    def subscribe(self):
-        return self.send_request("mining.subscribe", [])
+    def login(self):
+        return self.send_request("login", {
+            "login": self.username,
+            "pass": self.password,
+            "agent": "AI-Monero-Miner-Ultra/1.0"
+        })
 
-    def authorize(self):
-        return self.send_request("mining.authorize", [self.username, self.password])
-
-    def submit(self, worker_name, job_id, extranonce2, ntime, nonce):
-        return self.send_request("mining.submit", [worker_name, job_id, extranonce2, ntime, nonce])
+    def submit(self, job_id, nonce, result):
+        return self.send_request("submit", {
+            "id": self.worker_id,
+            "job_id": job_id,
+            "nonce": nonce,
+            "result": result
+        })
 
     def listen(self):
         while self.running:
             if not self.is_connected:
                 time.sleep(5)
                 if self.connect():
-                    self.subscribe()
-                    time.sleep(1)
-                    self.authorize()
+                    self.login()
                 continue
 
             try:
-                line = self.sock_file.readline()
-                if not line:
+                data = self.sock.recv(4096)
+                if not data:
                     print("Disconnected from pool.")
                     self.is_connected = False
                     continue
 
-                message = json.loads(line)
+                lines = data.decode().split('\n')
+                for line in lines:
+                    if not line.strip(): continue
+                    message = json.loads(line)
+                    self.handle_message(message)
             except Exception as e:
                 print(f"Error reading from socket: {e}")
                 self.is_connected = False
                 continue
 
-            # Responses
-            if 'id' in message and message['id'] is not None:
-                if message['id'] == 1: # subscribe response
-                    if message['result']:
-                        self.subscription_details = message['result'][0]
-                        self.extranonce1 = message['result'][1]
-                        self.extranonce2_size = message['result'][2]
-                        print(f"Subscribed: extranonce1={self.extranonce1}")
-                elif message['id'] == 2: # authorize response
-                    self.authorized = message['result']
-                    print(f"Authorized: {self.authorized}")
+    def handle_message(self, message):
+        # Handle login response
+        if "id" in message and message["id"] == 1:
+            if message.get("result"):
+                res = message["result"]
+                self.worker_id = res.get("id")
+                job = res.get("job")
+                if job and self.on_new_job:
+                    self.on_new_job(job)
+                print(f"Logged in. Worker ID: {self.worker_id}")
+            elif message.get("error"):
+                print(f"Login error: {message['error']}")
 
-            # Notifications
-            else:
-                method = message.get('method')
-                if method == 'mining.notify':
-                    if self.on_new_job:
-                        self.on_new_job(message['params'])
-                elif method == 'mining.set_difficulty':
-                    if self.on_difficulty_change:
-                        self.on_difficulty_change(message['params'][0])
+        # Handle job notification (Monero pools often send this as a notification or result of submit)
+        method = message.get("method")
+        if method == "job":
+            if self.on_new_job:
+                self.on_new_job(message["params"])
+        elif "result" in message and message.get("id") != 1:
+            # Could be a result of submission or periodic status
+            pass
 
     def start_listening(self):
         self.running = True
@@ -116,3 +118,6 @@ class StratumClient:
         self.running = False
         if self.sock:
             self.sock.close()
+
+if __name__ == "__main__":
+    print("MoneroStratumClient defined.")

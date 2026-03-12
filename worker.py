@@ -1,31 +1,53 @@
 import multiprocessing
 import binascii
 import time
-from hashing import scrypt_hash
+from hashing import randomx_init, randomx_hash
 
-def mining_worker(worker_id, header_base, start_nonce, end_nonce, target, result_queue, stop_event, progress_counter):
+def mining_worker(worker_id, blob_hex, target, seed_hash_hex, start_nonce, end_nonce, result_queue, stop_event, progress_counter):
     """
-    Worker process to perform hashing.
+    Worker process to perform RandomX hashing for Monero.
     """
-    local_count = 0
-    for nonce in range(start_nonce, end_nonce):
-        if stop_event.is_set():
-            break
+    try:
+        blob = binascii.unhexlify(blob_hex)
+        seed_hash = binascii.unhexlify(seed_hash_hex)
 
-        nonce_bytes = nonce.to_bytes(4, 'little')
-        header = header_base + nonce_bytes
+        # Initialize RandomX VM for this process
+        randomx_init(seed_hash)
 
-        hash_bytes = scrypt_hash(header)
-        hash_int = int.from_bytes(hash_bytes, 'little')
+        local_count = 0
+        # Monero nonces are typically 4 bytes at a specific offset in the blob.
+        # However, Stratum often sends a blob where we just need to replace the nonce bytes.
+        # The nonce offset is usually at byte 39 in the hashing blob for Monero.
+        # But we will handle it by taking the blob and inserting the nonce.
 
-        local_count += 1
-        if local_count >= 10: # Update shared counter periodically
-            with progress_counter.get_lock():
-                progress_counter.value += local_count
-            local_count = 0
+        # Assuming standard Monero blob where nonce is at 39-42
+        # (Actually, it's pool dependent, but most Stratum pools provide a blob with a placeholder)
 
-        if hash_int < target:
-            result_queue.put((nonce, hash_bytes))
+        for nonce in range(start_nonce, end_nonce):
+            if stop_event.is_set():
+                break
+
+            # Nonce is 4 bytes
+            nonce_bytes = nonce.to_bytes(4, 'little')
+            # Insert nonce into blob at offset 39
+            current_blob = blob[:39] + nonce_bytes + blob[43:]
+
+            hash_bytes = randomx_hash(current_blob)
+            # RandomX hash is 32 bytes. Monero target comparison is usually against the reversed hash or just as a large int.
+            # In Monero, hash_int < target
+            hash_int = int.from_bytes(hash_bytes, 'little')
+
+            local_count += 1
+            if local_count >= 5: # Update shared counter (RandomX is slow, so frequent updates are fine)
+                with progress_counter.get_lock():
+                    progress_counter.value += local_count
+                local_count = 0
+
+            if hash_int < target:
+                result_queue.put((nonce, binascii.hexlify(hash_bytes).decode()))
+
+    except Exception as e:
+        print(f"Worker {worker_id} error: {e}")
 
 class MultiProcessMiner:
     def __init__(self, num_processes=None):
@@ -33,13 +55,11 @@ class MultiProcessMiner:
         self.processes = []
         self.result_queue = multiprocessing.Queue()
         self.stop_event = multiprocessing.Event()
-        self.progress_counter = multiprocessing.Value('Q', 0) # Unsigned long long
+        self.progress_counter = multiprocessing.Value('Q', 0)
 
-    def start_mining(self, header_base, start_nonce, end_nonce, target):
+    def start_mining(self, blob_hex, target, seed_hash_hex, start_nonce, end_nonce):
         self.stop_event.clear()
         self.processes = []
-        # Reset progress counter for each new job/range
-        # self.progress_counter.value = 0
 
         nonce_range = end_nonce - start_nonce
         chunk_size = max(1, nonce_range // self.num_processes)
@@ -51,7 +71,7 @@ class MultiProcessMiner:
 
             p = multiprocessing.Process(
                 target=mining_worker,
-                args=(i, header_base, p_start, p_end, target, self.result_queue, self.stop_event, self.progress_counter)
+                args=(i, blob_hex, target, seed_hash_hex, p_start, p_end, self.result_queue, self.stop_event, self.progress_counter)
             )
             p.start()
             self.processes.append(p)
@@ -74,12 +94,4 @@ class MultiProcessMiner:
         return any(p.is_alive() for p in self.processes)
 
 if __name__ == "__main__":
-    miner = MultiProcessMiner(num_processes=2)
-    header_base = b"0" * 76
-    target = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-    miner.start_mining(header_base, 0, 100, target)
-    time.sleep(2)
-    print(f"Progress: {miner.progress_counter.value} hashes")
-    miner.stop_mining()
-    results = miner.get_results()
-    print(f"Found {len(results)} hashes.")
+    print("MultiProcessMiner for Monero defined.")

@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Litecoin Miner GUI V3</title>
+    <title>AI Monero Miner GUI V4</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>AI Litecoin Miner Dashboard <span id="protocol-v" class="protocol-badge">V1</span></h1>
+            <h1>AI Monero Miner Dashboard <span id="protocol-v" class="protocol-badge">RandomX</span></h1>
             <div id="status-badge" class="badge">Checking...</div>
         </header>
 
@@ -19,8 +19,8 @@
                 <p id="hashrate">0.00 H/s</p>
             </div>
             <div class="stat-card">
-                <h3>Total Hashes</h3>
-                <p id="total-hashes">0</p>
+                <h3>CPU Temp</h3>
+                <p id="temp">-- °C</p>
             </div>
             <div class="stat-card">
                 <h3>Shares Found</h3>
@@ -37,27 +37,27 @@
             <form id="config-form">
                 <div class="form-group">
                     <label>Pool Host:</label>
-                    <input type="text" name="host" id="host" value="litecoinpool.org">
+                    <input type="text" name="host" id="host" value="pool.supportxmr.com">
                 </div>
                 <div class="form-group">
                     <label>Pool Port:</label>
                     <input type="number" name="port" id="port" value="3333">
                 </div>
                 <div class="form-group">
-                    <label>Worker Username:</label>
-                    <input type="text" name="user" id="user" placeholder="username.worker">
+                    <label>Monero Address:</label>
+                    <input type="text" name="user" id="user" placeholder="Your XMR Address">
+                </div>
+                <div class="form-group">
+                    <label>Password:</label>
+                    <input type="text" name="pass" id="pass" value="x">
                 </div>
                 <div class="form-group">
                     <label>Initial Threads:</label>
                     <input type="number" name="threads" id="threads-in" value="4">
                 </div>
                 <div class="form-group checkbox-group">
-                    <input type="checkbox" name="v2" id="v2">
-                    <label for="v2">Enable Stratum V2</label>
-                </div>
-                <div class="form-group checkbox-group">
                     <input type="checkbox" name="autotune" id="autotune" checked>
-                    <label for="autotune">Auto-Tuning</label>
+                    <label for="autotune">AI Auto-Tuning & Throttling</label>
                 </div>
                 <div class="btn-group">
                     <button type="button" id="start-btn" class="btn btn-primary">Start Mining</button>
@@ -67,9 +67,10 @@
         </section>
 
         <section class="log-section">
-            <h2>Recent Activity</h2>
-            <div id="logs" class="log-window">
-                <p>Waiting for activity...</p>
+            <h2>AI Status</h2>
+            <div class="stat-card" style="width: 100%;">
+                <p>AI Neural Network Trained: <span id="ai-trained">No</span></p>
+                <p>Total Hashes Processed: <span id="total-hashes">0</span></p>
             </div>
         </section>
     </div>
@@ -83,7 +84,8 @@
                     document.getElementById('total-hashes').textContent = data.total_hashes;
                     document.getElementById('shares').textContent = data.shares_found;
                     document.getElementById('threads').textContent = data.threads;
-                    document.getElementById('protocol-v').textContent = data.v2 ? 'V2' : 'V1';
+                    document.getElementById('temp').textContent = (data.cpu_temp ? data.cpu_temp.toFixed(1) : '--') + ' °C';
+                    document.getElementById('ai-trained').textContent = data.ai_trained ? 'Yes' : 'No';
 
                     const badge = document.getElementById('status-badge');
                     if (data.is_mining) {
@@ -98,11 +100,15 @@
 
         document.getElementById('start-btn').onclick = () => {
             const formData = new FormData(document.getElementById('config-form'));
-            fetch('/start', { method: 'POST', body: formData });
+            fetch('/start', { method: 'POST', body: formData })
+                .then(r => r.json())
+                .then(data => alert(data.status));
         };
 
         document.getElementById('stop-btn').onclick = () => {
-            fetch('/stop', { method: 'POST' });
+            fetch('/stop', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => alert(data.status));
         };
 
         setInterval(updateStats, 2000);
