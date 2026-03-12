@@ -1,15 +1,15 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, send_from_directory, request, jsonify
 import threading
-import time
+import os
 from miner import MinerController
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='frontend/dist', static_url_path='/')
 miner_instance = None
 miner_thread = None
 
 @app.route('/')
-def index():
-    return render_template('index.html')
+def serve_index():
+    return send_from_directory(app.static_folder, 'index.html')
 
 @app.route('/stats')
 def get_stats():
@@ -42,12 +42,22 @@ def start_miner():
     if miner_instance and miner_instance.is_mining:
         return jsonify({'status': 'Already mining'})
 
-    host = request.form.get('host', 'pool.supportxmr.com')
-    port = int(request.form.get('port', 3333))
-    user = request.form.get('user')
-    password = request.form.get('pass', 'x')
-    threads = int(request.form.get('threads', 4))
-    autotune = request.form.get('autotune') == 'on'
+    # Handle both Form and JSON for new React frontend compatibility
+    if request.is_json:
+        data = request.json
+        host = data.get('host', 'pool.supportxmr.com')
+        port = int(data.get('port', 3333))
+        user = data.get('user')
+        password = data.get('pass', 'x')
+        threads = int(data.get('threads', 4))
+        autotune = data.get('autotune', True)
+    else:
+        host = request.form.get('host', 'pool.supportxmr.com')
+        port = int(request.form.get('port', 3333))
+        user = request.form.get('user')
+        password = request.form.get('pass', 'x')
+        threads = int(request.form.get('threads', 4))
+        autotune = request.form.get('autotune') == 'on'
 
     if not user:
         return jsonify({'status': 'Error: Missing worker username/address'}), 400
