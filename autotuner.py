@@ -1,57 +1,75 @@
 import multiprocessing
 import time
 import os
+import psutil
+import random
 
 class AutoTuner:
     def __init__(self, miner_controller):
         self.miner = miner_controller
         self.running = False
         self.last_tuning_time = time.time()
+        self.temp_threshold = 80
+        self.cpu_count = multiprocessing.cpu_count()
+
+        # Self-learning exploration params
+        self.exploration_rate = 0.15 # 15% chance to try a random configuration
+        self.exploration_interval = 60 # Check exploration every 60s
+
+    def get_max_temp(self):
+        if hasattr(self.miner, 'health'):
+            return self.miner.health.get_cpu_temp()
+        try:
+            temps = psutil.sensors_temperatures()
+            if not temps: return None
+            max_t = 0
+            for name, entries in temps.items():
+                for entry in entries:
+                    if entry.current > max_t: max_t = entry.current
+            return max_t
+        except Exception:
+            return None
 
     def get_system_load(self):
-        # returns 1-minute load average normalized by CPU count
-        load1, load5, load15 = os.getloadavg()
-        cpu_count = multiprocessing.cpu_count()
-        return load1 / cpu_count
+        try:
+            load1, _, _ = os.getloadavg()
+            return load1 / self.cpu_count
+        except Exception:
+            return 0.5
 
     def tune(self):
-        """
-        Main auto-tuning loop.
-        """
         while self.running:
             now = time.time()
-            if now - self.last_tuning_time > 30: # Tune every 30s
-                load = self.get_system_load()
-                current_threads = self.miner.mp_miner.num_processes
+            load = self.get_system_load()
+            temp = self.get_max_temp()
+            current_threads = self.miner.mp_miner.num_processes
+            hashrate = self.miner.hash_rate
 
-                # If load is high (> 80%), reduce threads
-                if load > 0.8 and current_threads > 1:
-                    new_threads = current_threads - 1
-                    print(f"[AutoTuning] High load ({load:.2f}), reducing threads to {new_threads}")
-                    self.miner.mp_miner.num_processes = new_threads
-                    self.miner.mp_miner.stop_mining()
-                    self.miner.start_mp_work()
+            # 1. Update AI with latest experience
+            if self.miner.ai:
+                self.miner.ai.collect_experience(load, temp, current_threads, hashrate)
 
-                # If load is low (< 40%) and threads < CPU count, increase threads
-                elif load < 0.4 and current_threads < multiprocessing.cpu_count():
-                    new_threads = current_threads + 1
-                    print(f"[AutoTuning] Low load ({load:.2f}), increasing threads to {new_threads}")
-                    self.miner.mp_miner.num_processes = new_threads
-                    self.miner.mp_miner.stop_mining()
-                    self.miner.start_mp_work()
-
-                # Optimization: Adjust AI nonce range based on hashrate
-                # If hashrate is high, we can cover more nonces
-                hr = self.miner.hash_rate
-                if hr > 1000:
-                    new_range = 200000
-                elif hr > 500:
-                    new_range = 100000
+            # 2. Main Tuning Cycle (every 30s)
+            if now - self.last_tuning_time > 30:
+                # Critical safety check first (High Heat overrides AI)
+                if temp and temp >= self.temp_threshold:
+                    new_threads = max(1, int(current_threads * 0.8))
+                    print(f"[AutoTuner] High Heat Alert! Throttling: {new_threads}")
+                    self.miner.update_threads(new_threads)
                 else:
-                    new_range = 50000
-
-                # We can store this in miner or AI
-                # self.miner.ai.range_size = new_range
+                    # Self-Learning Decision: Explore vs Exploit
+                    if random.random() < self.exploration_rate:
+                        # Exploration: Try a random thread count to gather new data
+                        new_threads = random.randint(1, self.cpu_count)
+                        print(f"[AutoTuner] AI Exploring: Testing {new_threads} threads...")
+                        self.miner.update_threads(new_threads)
+                    else:
+                        # Exploitation: Use AI to predict optimal configuration
+                        if self.miner.ai and self.miner.ai.is_trained:
+                            new_threads = self.miner.ai.predict_optimal_threads(load, temp)
+                            if new_threads != current_threads:
+                                print(f"[AutoTuner] AI Optimization: Predicted optimal threads = {new_threads}")
+                                self.miner.update_threads(new_threads)
 
                 self.last_tuning_time = now
 
@@ -67,4 +85,4 @@ class AutoTuner:
         self.running = False
 
 if __name__ == "__main__":
-    print("AutoTuner logic defined.")
+    print("AI Self-Learning AutoTuner with Exploration Loop defined.")

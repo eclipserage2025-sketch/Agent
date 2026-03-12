@@ -1,15 +1,15 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, send_from_directory, request, jsonify
 import threading
-import time
+import os
 from miner import MinerController
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='frontend/dist', static_url_path='/')
 miner_instance = None
 miner_thread = None
 
 @app.route('/')
-def index():
-    return render_template('index.html')
+def serve_index():
+    return send_from_directory(app.static_folder, 'index.html')
 
 @app.route('/stats')
 def get_stats():
@@ -21,8 +21,9 @@ def get_stats():
             'total_hashes': miner_instance.mp_miner.progress_counter.value,
             'shares_found': miner_instance.shares_found,
             'ai_trained': miner_instance.ai.is_trained,
+            'ai_samples': getattr(miner_instance.ai, 'total_samples', 0),
             'threads': miner_instance.mp_miner.num_processes,
-            'v2': miner_instance.v2
+            'cpu_temp': miner_instance.autotuner.get_max_temp()
         })
     return jsonify({
         'is_mining': False,
@@ -30,8 +31,9 @@ def get_stats():
         'total_hashes': 0,
         'shares_found': 0,
         'ai_trained': False,
+        'ai_samples': 0,
         'threads': 0,
-        'v2': False
+        'cpu_temp': None
     })
 
 @app.route('/start', methods=['POST'])
@@ -40,17 +42,27 @@ def start_miner():
     if miner_instance and miner_instance.is_mining:
         return jsonify({'status': 'Already mining'})
 
-    host = request.form.get('host', 'litecoinpool.org')
-    port = int(request.form.get('port', 3333))
-    user = request.form.get('user')
-    threads = int(request.form.get('threads', 4))
-    v2 = request.form.get('v2') == 'on'
-    autotune = request.form.get('autotune') == 'on'
+    # Handle both Form and JSON for new React frontend compatibility
+    if request.is_json:
+        data = request.json
+        host = data.get('host', 'pool.supportxmr.com')
+        port = int(data.get('port', 3333))
+        user = data.get('user')
+        password = data.get('pass', 'x')
+        threads = int(data.get('threads', 4))
+        autotune = data.get('autotune', True)
+    else:
+        host = request.form.get('host', 'pool.supportxmr.com')
+        port = int(request.form.get('port', 3333))
+        user = request.form.get('user')
+        password = request.form.get('pass', 'x')
+        threads = int(request.form.get('threads', 4))
+        autotune = request.form.get('autotune') == 'on'
 
     if not user:
-        return jsonify({'status': 'Error: Missing worker username'}), 400
+        return jsonify({'status': 'Error: Missing worker username/address'}), 400
 
-    miner_instance = MinerController(host, port, user, v2=v2)
+    miner_instance = MinerController(host, port, user, password=password)
     miner_instance.mp_miner.num_processes = threads
 
     def run_miner():
