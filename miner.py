@@ -1,10 +1,10 @@
-import struct
-import binascii
+import json
+import os
+import subprocess
 import time
 import threading
-from stratum import MoneroStratumClient
+import requests
 from ai_model import AIMiner
-from worker import MultiProcessMiner
 from autotuner import AutoTuner
 from health_check import HealthMonitor
 
@@ -15,141 +15,137 @@ class MinerController:
         self.username = username
         self.password = password
 
-        self.client = MoneroStratumClient(host, port, username, password)
         self.ai = AIMiner()
-        self.mp_miner = MultiProcessMiner()
         self.autotuner = AutoTuner(self)
         self.health = HealthMonitor()
 
+        self.process = None
         self.is_mining = False
-        self.current_job = None
-        self.target = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-
-        # Stats
+        self.hash_rate = 0
         self.shares_found = 0
         self.start_time = time.time()
-        self.hash_rate = 0
-        self.last_hashes_count = 0
-        self.last_stats_time = time.time()
+        self.threads = 4
+        self.api_port = 4048
 
-    def handle_new_job(self, job):
-        self.current_job = job
-        target_hex = job.get('target')
-        if target_hex:
-            if len(target_hex) == 8:
-                self.target = int.from_bytes(binascii.unhexlify(target_hex), 'little')
-            else:
-                self.target = int(target_hex, 16)
+        # Compat with old GUI code
+        self.mp_miner = type('obj', (object,), {
+            'progress_counter': type('obj', (object,), {'value': 0}),
+            'num_processes': self.threads
+        })
 
-        print(f"New Job received: {job.get('job_id')}, Target: {target_hex}")
+        # XMRig binary name
+        self.xmrig_bin = "xmrig.exe"
 
-        if self.is_mining:
-            self.mp_miner.stop_mining()
-            self.start_work()
+    def generate_config(self):
+        config = {
+            "autosave": False,
+            "cpu": {
+                "enabled": True,
+                "max-threads-hint": 100,
+                "threads": self.threads,
+            },
+            "opencl": False,
+            "cuda": False,
+            "pools": [
+                {
+                    "url": f"{self.host}:{self.port}",
+                    "user": self.username,
+                    "pass": self.password,
+                    "keepalive": True,
+                    "tls": False
+                }
+            ],
+            "http": {
+                "enabled": True,
+                "host": "127.0.0.1",
+                "port": self.api_port,
+                "access-token": None,
+                "restricted": True
+            }
+        }
+        with open("xmrig_config.json", "w") as f:
+            json.dump(config, f, indent=4)
+        return "xmrig_config.json"
 
-    def start_work(self):
-        if not self.current_job:
-            return
-
-        blob = self.current_job['blob']
-        seed_hash = self.current_job['seed_hash']
-
-        import random
-        start_nonce = random.randint(0, 0x7FFFFFFF)
-        end_nonce = start_nonce + 1000000
-
-        self.mp_miner.start_mining(blob, self.target, seed_hash, start_nonce, end_nonce)
-
-    def update_threads(self, num):
-        if num == self.mp_miner.num_processes:
-            return
-        print(f"[MinerController] Updating thread count to {num}")
-        self.mp_miner.num_processes = num
-        if self.is_mining:
-            self.mp_miner.stop_mining()
-            self.start_work()
-
-    def stats_dashboard(self):
+    def fetch_metrics(self):
         while self.is_mining:
-            now = time.time()
-            elapsed_total = now - self.start_time
-            elapsed_delta = now - self.last_stats_time
-
-            if elapsed_delta > 0:
-                current_hashes = self.mp_miner.progress_counter.value
-                delta_hashes = current_hashes - self.last_hashes_count
-                self.hash_rate = delta_hashes / elapsed_delta
-                self.ai.set_last_hashrate(self.hash_rate)
-
-                self.last_hashes_count = current_hashes
-                self.last_stats_time = now
-
-            print("\n" + "="*50)
-            print(f"AI MONERO MINER | Uptime: {int(elapsed_total)}s")
-            print(f"Hashrate: {self.hash_rate:.2f} H/s")
-            print(f"Shares Found: {self.shares_found}")
-            print(f"Threads: {self.mp_miner.num_processes} | AI Trained: {self.ai.is_trained}")
-            print("="*50)
-            time.sleep(10)
+            try:
+                resp = requests.get(f"http://127.0.0.1:{self.api_port}/1/summary", timeout=2)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    self.hash_rate = data.get("hashrate", {}).get("total", [0])[0]
+                    self.shares_found = data.get("results", {}).get("shares_good", 0)
+                    # Update compatibility fields
+                    self.mp_miner.progress_counter.value = data.get("results", {}).get("hashes_total", 0)
+            except Exception:
+                pass
+            time.sleep(5)
 
     def monitor_health(self):
-        """Monitors health every 30 seconds as requested."""
         while self.is_mining:
             status, temp = self.health.check_status()
-            if status == 2: # Critical
-                print(f"[CRITICAL] Temperature {temp}°C exceeded 90°C! Gracefully stopping miner.")
-                # We stop the controller's mining status but keep the thread alive if needed
-                # (though here we call stop which shuts everything down)
+            if status == 2:
+                print(f"[CRITICAL] Temperature {temp}°C exceeded 90°C! Shutting down XMRig.")
                 self.stop()
                 break
-            elif status == 1: # Throttling
-                print(f"[WARNING] Temperature {temp}°C exceeded 80°C. Throttling intensity.")
-                # Intensity reduction is handled by AutoTuner/AI which we will update next
-
             time.sleep(30)
 
     def start(self, autotune=True):
-        self.client.on_new_job = self.handle_new_job
-
-        if not self.client.connect():
+        if not os.path.exists(self.xmrig_bin):
+            print(f"[Miner] Error: {self.xmrig_bin} not found. Run downloader first.")
             return
 
-        self.client.start_listening()
-        self.client.login()
+        self.generate_config()
+        print(f"[Miner] Starting XMRig with {self.threads} threads...")
+
+        self.process = subprocess.Popen(
+            [self.xmrig_bin, "-c", "xmrig_config.json"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True
+        )
 
         self.is_mining = True
-        self.last_stats_time = time.time()
+        self.start_time = time.time()
 
-        # Start stats thread
-        stats_thread = threading.Thread(target=self.stats_dashboard, daemon=True)
-        stats_thread.start()
+        threading.Thread(target=self.fetch_metrics, daemon=True).start()
+        threading.Thread(target=self.monitor_health, daemon=True).start()
 
-        # Start health monitor thread
-        health_thread = threading.Thread(target=self.monitor_health, daemon=True)
-        health_thread.start()
-
-        # Start autotuner
         if autotune:
             self.autotuner.start()
 
-        # Main monitoring loop
-        while self.is_mining:
-            results = self.mp_miner.get_results()
-            for nonce, hash_hex in results:
-                print(f"\n[!] SHARE FOUND: {hash_hex}")
-                self.shares_found += 1
-                self.client.submit(self.current_job['job_id'], hex(nonce)[2:].zfill(8), hash_hex)
-
-            if self.current_job and not self.mp_miner.is_running():
-                self.start_work()
-
+        while self.is_mining and self.process.poll() is None:
             time.sleep(1)
+
+    def update_threads(self, num):
+        if num == self.threads:
+            return
+        print(f"[Miner] Updating threads {self.threads} -> {num}. Restarting XMRig...")
+        self.threads = num
+        self.mp_miner.num_processes = num
+        if self.is_mining:
+            self.stop_subprocess()
+            self.generate_config()
+            self.process = subprocess.Popen(
+                [self.xmrig_bin, "-c", "xmrig_config.json"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True
+            )
+
+    def stop_subprocess(self):
+        if self.process:
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+            self.process = None
 
     def stop(self):
         self.is_mining = False
-        self.mp_miner.stop_mining()
-        self.client.stop()
+        self.stop_subprocess()
         self.autotuner.stop()
 
 if __name__ == "__main__":
-    print("MinerController for Monero with health monitoring defined.")
+    print("MinerController for XMRig defined.")

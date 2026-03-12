@@ -1,33 +1,41 @@
 import argparse
 import sys
 import signal
+import os
 from miner import MinerController
 from gui import run_gui
+from downloader import download_xmrig_windows
 
 def main():
-    parser = argparse.ArgumentParser(description="ULTIMATE AI MONERO MINER (RANDOMX)")
+    parser = argparse.ArgumentParser(description="ULTIMATE AI MONERO MINER (XMRIG INTEGRATED)")
     parser.add_argument("--gui", action="store_true", help="Start the miner in Web GUI mode")
-    parser.add_argument("--autotune", action="store_true", default=True, help="Enable auto-tuning (default: True)")
+    parser.add_argument("--autotune", action="store_true", default=True, help="Enable auto-tuning")
     parser.add_argument("--no-autotune", dest="autotune", action="store_false", help="Disable auto-tuning")
 
     parser.add_argument("--host", default="pool.supportxmr.com", help="Pool host")
     parser.add_argument("--port", type=int, default=3333, help="Pool port")
-    parser.add_argument("--user", help="Monero address / worker name")
+    parser.add_argument("--user", help="Monero address")
     parser.add_argument("--pass", dest="password", default="x", help="Pool password")
-    parser.add_argument("--threads", type=int, default=None, help="Number of mining threads")
+    parser.add_argument("--threads", type=int, default=4, help="Number of mining threads")
 
     args = parser.parse_args()
+
+    # Ensure XMRig is present
+    if not os.path.exists("xmrig.exe"):
+        print("XMRig binary not found. Attempting to download...")
+        if not download_xmrig_windows():
+            print("Failed to download XMRig. Please install manually.")
+            sys.exit(1)
 
     if args.gui:
         run_gui()
         return
 
     if not args.user:
-        parser.error("--user is required for CLI mode. Use --gui to start in web mode.")
+        parser.error("--user is required for CLI mode.")
 
     controller = MinerController(args.host, args.port, args.user, password=args.password)
-    if args.threads:
-        controller.mp_miner.num_processes = args.threads
+    controller.threads = args.threads
 
     def signal_handler(sig, frame):
         print("\nExiting AI Monero Miner...")

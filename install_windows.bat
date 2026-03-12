@@ -12,7 +12,7 @@ if %errorlevel% neq 0 (
 )
 
 :: Create Virtual Environment
-echo [1/3] Creating virtual environment...
+echo [1/4] Creating virtual environment...
 python -m venv venv
 if %errorlevel% neq 0 (
     echo [ERROR] Failed to create venv.
@@ -21,18 +21,27 @@ if %errorlevel% neq 0 (
 )
 
 :: Install Dependencies
-echo [2/3] Installing Python dependencies...
+echo [2/4] Installing Python dependencies...
 call venv\Scripts\activate
 pip install --upgrade pip
 pip install -r requirements.txt
 if %errorlevel% neq 0 (
-    echo [ERROR] Failed to install dependencies. Note: C++ Build Tools are required for RandomX.
+    echo [ERROR] Failed to install dependencies.
     pause
     goto :eof
 )
 
-:: Build Frontend
-echo [3/3] Building React Frontend...
+:: Download XMRig
+echo [3/4] Downloading XMRig Binary...
+python downloader.py
+if %errorlevel% neq 0 (
+    echo [ERROR] Failed to download XMRig.
+    pause
+    goto :eof
+)
+
+:: Install Frontend
+echo [4/4] Building React Frontend...
 echo Note: This requires Node.js and npm to be installed.
 cd frontend
 call npm install
